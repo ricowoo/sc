@@ -1,0 +1,113 @@
+{"servers":
+	[
+		{
+			"username": "s00",
+			"name": "本机",
+			"type": "kv00",
+			"host": "host0",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},
+		{
+			"username": "RN137",
+			"name": "UK137",
+			"type": "UKFD",
+			"host": "RN137",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},	
+
+		{
+			"username": "AMD8",
+			"name": "AMD8",
+			"type": "ADVIN",
+			"host": "ADVIN",
+			"location": "DA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},		
+
+		
+
+	
+		{
+			"username": "RN133",
+			"name": "UK133",
+			"type": "RN133",
+			"host": "RN133",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},
+
+
+
+		
+
+	
+
+
+		{
+			"username": "s09",
+			"name": "UG主力",
+			"type": "RN",
+			"host": "host9",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},		
+		{
+			"username": "s02",
+			"name": "UG备用",
+			"type": "kv02",
+			"host": "host11",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},
+
+		
+		{
+			"username": "fpbm",
+			"name": "FPBM",
+			"type": "FPBM",
+			"host": "FPBM",
+			"location": "LV",
+			"password": "USER_DEFAULT_PASSWORD"
+		},
+
+
+
+
+
+		{
+			"username": "gcbm",
+			"name": "GCBM",
+			"type": "GCBM",
+			"host": "BYVM",
+			"location": "LV",
+			"password": "USER_DEFAULT_PASSWORD"
+		},	
+
+		{
+			"username": "RN179",
+			"name": "RN179",
+			"type": "RN179",
+			"host": "RN179",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		},
+
+
+
+		{
+			"username": "VMBF",
+			"name": "VMBF",
+			"type": "VMBF",
+			"host": "VMBF",
+			"location": "LA",
+			"password": "USER_DEFAULT_PASSWORD"
+		}
+
+
+
+	
+				
+	]
+}
