@@ -1213,12 +1213,9 @@ set_kcptun_config() {
 		EOF
 		read -p "(默认: ${listen_port}): " input
 		if [ -n "$input" ]; then
-			if is_port "$input"; then
+			
 				listen_port="$input"
-			else
-				echo "输入有误, 请输入 1~65535 之间的数字!"
-				continue
-			fi
+			
 		fi
 
 		if port_using "$listen_port" && \
