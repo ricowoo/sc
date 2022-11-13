@@ -44,7 +44,7 @@ SUPERVISOR_SYSTEMD_FILE_URL="${BASE_URL}/startup/supervisord.systemd"
 
 # 默认参数
 # =======================
-D_LISTEN_PORT=39000-40000
+D_LISTEN_PORT=39000-39020
 D_TARGET_ADDR='127.0.0.1'
 D_TARGET_PORT=12948
 D_KEY="myss"
