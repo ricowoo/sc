@@ -48,7 +48,7 @@ D_LISTEN_PORT=39000-40000
 D_TARGET_ADDR='127.0.0.1'
 D_TARGET_PORT=12948
 D_KEY="myss"
-D_CRYPT='salsa20'
+D_CRYPT='aes-128'
 D_MODE='fast3'
 D_MTU=1350
 D_SNDWND=8192
@@ -1314,7 +1314,7 @@ set_kcptun_config() {
 	EOF
 
 	[ -z "$crypt" ] && crypt="$D_CRYPT"
-	local crypt_list="salsa20 aes aes-128 aes-192 blowfish twofish cast5 3des tea xtea xor none"
+	local crypt_list="aes aes-128 aes-192 blowfish salsa20 twofish cast5 3des tea xtea xor none"
 	local i=0
 	cat >&1 <<-'EOF'
 	请选择加密方式(crypt)
