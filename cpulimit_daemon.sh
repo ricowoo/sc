@@ -4,7 +4,7 @@
 # ==============================================================
 
 # Variables
-CPU_LIMIT=30       	# Maximum percentage CPU consumption by each PID
+CPU_LIMIT=35       	# Maximum percentage CPU consumption by each PID
 DAEMON_INTERVAL=3  	# Daemon check interval in seconds
 BLACK_PROCESSES_LIST= # Limit only processes defined in this variable. If variable is empty (default) all violating processes are limited.
 WHITE_PROCESSES_LIST=   # Limit all processes except processes defined in this variable. If variable is empty (default) all violating processes are limited.
