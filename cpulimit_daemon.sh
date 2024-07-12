@@ -6,7 +6,7 @@
 # Variables
 CPU_LIMIT=20       	# Maximum percentage CPU consumption by each PID
 DAEMON_INTERVAL=3  	# Daemon check interval in seconds
-BLACK_PROCESSES_LIST= /usr/local/kcptun/ # Limit only processes defined in this variable. If variable is empty (default) all violating processes are limited.
+BLACK_PROCESSES_LIST=server_linux_am # Limit only processes defined in this variable. If variable is empty (default) all violating processes are limited.
 WHITE_PROCESSES_LIST=   # Limit all processes except processes defined in this variable. If variable is empty (default) all violating processes are limited.
 
 # Check if one of the variables BLACK_PROCESSES_LIST or WHITE_PROCESSES_LIST is defined.
