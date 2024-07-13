@@ -6,8 +6,8 @@
 
 # Set MBlimit Alicdn url Url default
 MBlimit=1024
-url=https://lg-lax02.racknerd.com/1000MB.test
-Url=http://lg-sj.racknerd.com/1000MB.test
+url=https://speedtest.lv.buyvm.net/1000MB.test
+Url=https://speedtest.ny.buyvm.net/1000MB.test
 
 # User-Agent
 UA="Mozilla/5.0 (Linux; Android 9; Nokia X6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.121 Mobile Safari/537.36"
