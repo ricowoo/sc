@@ -2379,6 +2379,9 @@ show_current_instance_info() {
 				fi
 			fi
 		done
+		    # 添加 autoexpire 和 conn 参数
+    client_config="$(echo "$client_config" | $JQ_BIN -r '.autoexpire=300')"
+    client_config="$(echo "$client_config" | $JQ_BIN -r '.conn=3')"
 	}
 
 	gen_client_configs "crypt" "mode" "mtu" "sndwnd" "rcvwnd" "datashard" \
