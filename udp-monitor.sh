@@ -1,5 +1,5 @@
 #!/bin/bash
-
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
 # Define data file paths
 UDP_DIR="/root/udp"
 PORTS_CONF="$UDP_DIR/ports.conf"
@@ -8,7 +8,7 @@ DATA_FILE="$UDP_DIR/data.txt"
 # Function to get bytes for a specific port range
 get_bytes() {
     local port_range=$1
-    sudo nft list ruleset | grep "udp sport $port_range" | awk '/udp sport/{for(i=1;i<=NF;i++) {if ($i=="bytes") bytes=$(i+1)}} END{print bytes}'
+    nft list ruleset | grep "udp sport $port_range" | awk '/udp sport/{for(i=1;i<=NF;i++) {if ($i=="bytes") bytes=$(i+1)}} END{print bytes}'
 }
 
 # Function to format bytes to human-readable units
