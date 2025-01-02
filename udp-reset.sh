@@ -1,4 +1,5 @@
 #!/bin/bash
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 # 保存完整的规则集到临时文件
 nft list ruleset > /tmp/nftables_backup.nft
