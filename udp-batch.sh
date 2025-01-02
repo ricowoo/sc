@@ -380,7 +380,7 @@ main() {
     crontab -l 2>/dev/null > "$temp_cron"
     
     # 准备新的定时任务
-    local reset_task="1 0 1 * * /root/udp/udp-reset.sh"
+    local reset_task="0 0 1 * * /root/udp/udp-reset.sh >> /root/udp/udp-reset.log 2>&1"
     local monitor_task="* * * * * /root/udp/udp-monitor.sh"
     local need_update=false
     
