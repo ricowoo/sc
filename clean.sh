@@ -3,7 +3,67 @@
 # 颜色定义
 GREEN='\033[0;32m'
 RED='\033[0;31m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
+
+# 添加重要系统目录保护
+protected_dirs=(
+    "/bin"
+    "/sbin"
+    "/usr/bin"
+    "/usr/sbin"
+    "/usr/local/bin"
+    "/usr/local/sbin"
+    "/etc/passwd"
+    "/etc/shadow"
+    "/etc/group"
+    "/etc/gshadow"
+    "/etc/ssh"
+    "/boot"
+    "/www/server"  # 宝塔面板核心目录
+    "/www/server/panel"
+    "/www/server/nginx/conf"
+    "/www/server/php/*/etc"
+    "/www/server/mysql/conf"
+)
+
+# 添加安全检查函数
+check_protected_path() {
+    local path="$1"
+    for protected in "${protected_dirs[@]}"; do
+        if [[ "$path" == "$protected"* ]]; then
+            echo -e "${RED}警告: 试图清理受保护目录 $path${NC}"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# 添加系统检查
+pre_clean_check() {
+    echo -e "${YELLOW}执行系统检查...${NC}"
+    
+    # 检查系统负载
+    load=$(uptime | awk -F'load average:' '{ print $2 }' | cut -d, -f1)
+    if (( $(echo "$load > 2.0" | bc -l) )); then
+        echo -e "${RED}系统负载过高 (${load}), 建议稍后再试${NC}"
+        exit 1
+    fi
+    
+    # 检查磁盘空间
+    disk_usage=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$disk_usage" -gt 95 ]; then
+        echo -e "${RED}警告: 磁盘空间严重不足 (${disk_usage}%), 建议立即清理${NC}"
+    fi
+    
+    # 检查重要服务
+    services=("nginx" "mysqld" "php-fpm" "redis" "memcached")
+    for service in "${services[@]}"; do
+        if systemctl is-active "$service" >/dev/null 2>&1; then
+            echo -e "${GREEN}服务 $service 运行正常${NC}"
+        fi
+    done
+}
 
 # 检查是否为root用户
 if [[ $EUID -ne 0 ]]; then
@@ -45,6 +105,12 @@ calculate_freed_space() {
 safe_clean_dir() {
     local dir=$1
     local exclude=$2
+    
+    # 检查是否为受保护目录
+    if ! check_protected_path "$dir"; then
+        return 1
+    fi
+    
     if [ -d "$dir" ]; then
         before_size=$(get_size "$dir")
         if [ -n "$exclude" ]; then
@@ -57,8 +123,29 @@ safe_clean_dir() {
     fi
 }
 
-echo "开始系统清理..."
+# 修改 find 命令，添加保护
+safe_find() {
+    local dir=$1
+    local pattern=$2
+    local days=$3
+    local action=${4:-"-delete"}
+    
+    if ! check_protected_path "$dir"; then
+        return 1
+    fi
+    
+    find "$dir" -type f -regextype posix-extended -regex "$pattern" -mtime +"$days" $action 2>/dev/null
+}
+
+echo -e "${GREEN}开始系统清理...${NC}"
 echo "清理时间: $(date)"
+
+# 执行系统检查
+pre_clean_check
+
+# 设置错误处理
+set -e  # 遇到错误立即退出
+trap 'echo -e "${RED}错误发生在第 $LINENO 行${NC}"' ERR
 
 # 记录总体清理前的可用空间
 total_before=$(df -h / | awk '/\// {print $4}')
@@ -91,20 +178,21 @@ before_size=$(get_size /var/log)
 
 # 清理系统轮转日志
 echo "清理系统轮转日志..."
-find /var/log -type f -name "messages-*" -mtime +3 -delete
-find /var/log -type f -name "secure-*" -mtime +3 -delete
-find /var/log -type f -name "maillog-*" -mtime +3 -delete
-find /var/log -type f -name "spooler-*" -mtime +3 -delete
-find /var/log -type f -name "boot.log-*" -mtime +3 -delete
-find /var/log -type f -name "cron-*" -mtime +3 -delete
-find /var/log -type f -name "yum.log-*" -mtime +3 -delete
-find /var/log -type f -name "dmesg.old" -mtime +3 -delete
+safe_find "/var/log" "messages-.*" 3
+safe_find "/var/log" "secure-.*" 3
+safe_find "/var/log" "maillog-.*" 3
+safe_find "/var/log" "spooler-.*" 3
+safe_find "/var/log" "boot\.log-.*" 3
+safe_find "/var/log" "cron-.*" 3
+safe_find "/var/log" "yum\.log-.*" 3
+safe_find "/var/log" "dmesg\.old" 3
 
 # 压缩旧日志
-find /var/log -type f -name "*.log" -mtime +3 -exec gzip {} \;
+safe_find "/var/log" ".*\.log" 3 "-exec gzip {} \;"
 
-# 删除超过10天的压缩日志
-find /var/log -type f -name "*.gz" -mtime +3 -delete
+# 删除超过3天的压缩日志
+safe_find "/var/log" ".*\.gz" 3
+
 # 清理journal日志
 journalctl --vacuum-size=100M
 # 清理audit日志
@@ -153,8 +241,9 @@ fi
 
 # 7. 清理备份文件
 echo "清理旧备份文件..."
-# 宝塔面板备份目录
+# 宝塔面板和系统备份目录
 backup_dirs=(
+    # 宝塔面板相关
     "/www/backup"              # 网站备份
     "/www/backup/database"     # 数据库备份
     "/www/backup/site"         # 网站备份
@@ -164,36 +253,55 @@ backup_dirs=(
     "/www/server/panel/logs"   # 面板日志
     "/www/wwwlogs"            # 网站日志
     "/www/server/data"        # 数据库文件
+    
+    # 系统常见备份目录
+    "/backup"                 # 系统备份
+    "/var/backup"            # 系统备份
+    "/usr/local/backup"      # 本地备份
+    "/opt/backup"            # 可选备份
+    "/root/backup"           # root用户备份
+    "/home/backup"           # 用户备份
+    "/var/www/backup"        # Web备份
+    "/usr/backup"            # 程序备份
+    "/etc/backup"            # 配置备份
+    "/tmp/backup"            # 临时备份
 )
+
+# 备份文件类型
+backup_files_pattern="\.bak$|\.old$|\.backup$|\.[0-9]+$|\.tar$|\.tar\.gz$|\.tgz$|\.zip$|\.sql$|\.log$|\.gz$|\.xz$|\.bz2$|\.7z$|\.rar$|~$|\.swp$|\.swo$|\.swn$|\.bak\.[0-9]+$|\.save$|\.backup\.[0-9]+$|\.copy$"
 
 for dir in "${backup_dirs[@]}"; do
     if [ -d "$dir" ]; then
         echo "检查目录: $dir"
         before_size=$(get_size "$dir")
-        # 清理备份文件
-        find "$dir" -type f \( -name "*.bak" -o -name "*.old" -o -name "*.backup" -o -name "*.[0-9]" -o -name "*.tar" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.sql" -o -name "*.log" \) -mtime +10 -delete -print 2>/dev/null
+        # 清理超过30天的备份文件
+        safe_find "$dir" "$backup_files_pattern" 30 -delete -print 2>/dev/null
         after_size=$(get_size "$dir")
         calculate_freed_space "$before_size" "$after_size" "$dir 备份文件"
     fi
 done
 
-# 清理网站备份（保留最近30天）
-if [ -d "/www/backup/site" ]; then
-    echo "清理网站备份..."
-    before_size=$(get_size "/www/backup/site")
-    find /www/backup/site -type f -mtime +30 -delete -print 2>/dev/null
-    after_size=$(get_size "/www/backup/site")
-    calculate_freed_space "$before_size" "$after_size" "网站备份"
-fi
+# 全局搜索特定备份文件（仅在特定目录下）
+echo "检查系统其他备份文件..."
+global_search_dirs=(
+    "/etc"
+    "/var"
+    "/usr/local"
+    "/opt"
+    "/root"
+    "/home"
+)
 
-# 清理数据库备份（保留最近30天）
-if [ -d "/www/backup/database" ]; then
-    echo "清理数据库备份..."
-    before_size=$(get_size "/www/backup/database")
-    find /www/backup/database -type f -mtime +30 -delete -print 2>/dev/null
-    after_size=$(get_size "/www/backup/database")
-    calculate_freed_space "$before_size" "$after_size" "数据库备份"
-fi
+for dir in "${global_search_dirs[@]}"; do
+    if [ -d "$dir" ]; then
+        echo "检查目录: $dir"
+        before_size=$(get_size "$dir")
+        # 清理超过30天的备份文件
+        safe_find "$dir" "$backup_files_pattern" 30 -delete -print 2>/dev/null
+        after_size=$(get_size "$dir")
+        calculate_freed_space "$before_size" "$after_size" "$dir 备份文件"
+    fi
+done
 
 # 8. 清理Linux内核相关
 echo "清理内核相关..."
@@ -256,9 +364,9 @@ fi
 
 # 12. 清理vi备份文件
 echo "清理vi备份文件..."
-find / -type f -name ".*.sw[a-p]" -delete 2>/dev/null
-find / -type f -name ".*~" -delete 2>/dev/null
-find / -type f -name ".*\.un~" -delete 2>/dev/null
+safe_find "/" "\..*\.sw[a-p]" 0
+safe_find "/" "\..*~" 0
+safe_find "/" "\..*\.un~" 0
 
 # 13. 清理系统core dump
 echo "清理系统core dump..."
@@ -270,12 +378,7 @@ sysctl -p /etc/sysctl.d/disable-coredump.conf
 
 # 清理已存在的core dump文件
 echo "清理已存在的core dump文件..."
-core_files=$(find / -type f -name "core" -o -name "core.*" 2>/dev/null)
-if [ -n "$core_files" ]; then
-    before_size=$(get_size "$core_files")
-    rm -f $core_files
-    echo "已删除core dump文件"
-fi
+safe_find "/" "core|core\.*" 0
 
 # 清理系统崩溃目录
 crash_dirs=("/var/crash" "/var/lib/systemd/coredump" "/var/spool/abrt")
@@ -302,7 +405,11 @@ find / -xdev -type f -size +100M -exec ls -lh {} \; 2>/dev/null | sort -k5,5rh
 
 # 显示老旧文件（超过30天未访问）
 echo -e "\n老旧文件（超过30天未访问）:"
-find / -xdev -type f -atime +30 -size +10M -exec ls -lh {} \; 2>/dev/null | sort -k5,5rh
+for dir in "${backup_dirs[@]}"; do
+    if [ -d "$dir" ] && check_protected_path "$dir"; then
+        find "$dir" -type f -atime +30 -size +10M -exec ls -lh {} \; 2>/dev/null
+    fi
+done
 
 # 显示文件系统使用情况
 echo -e "\n文件系统使用情况:"
