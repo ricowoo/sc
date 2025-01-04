@@ -207,26 +207,89 @@ before_size=$(get_size /var/log)
 
 # 清理系统轮转日志
 echo -e "${GREEN}清理系统轮转日志...${NC}"
-check_command "safe_find '/var/log' 'messages-.*' 3" "清理messages日志"
-check_command "safe_find '/var/log' 'secure-.*' 3" "清理secure日志"
-check_command "safe_find '/var/log' 'maillog-.*' 3" "清理maillog日志"
-check_command "safe_find '/var/log' 'spooler-.*' 3" "清理spooler日志"
-check_command "safe_find '/var/log' 'boot\.log-.*' 3" "清理boot日志"
-check_command "safe_find '/var/log' 'cron-.*' 3" "清理cron日志"
-check_command "safe_find '/var/log' 'yum\.log-.*' 3" "清理yum日志"
-check_command "safe_find '/var/log' 'dmesg\.old' 3" "清理dmesg日志"
+
+# 定义日志文件数组
+declare -A log_files=(
+    ["messages"]="messages-.*"
+    ["secure"]="secure-.*"
+    ["maillog"]="maillog-.*"
+    ["spooler"]="spooler-.*"
+    ["boot"]="boot\.log-.*"
+    ["cron"]="cron-.*"
+    ["yum"]="yum\.log-.*"
+    ["dmesg"]="dmesg\.old"
+)
+
+# 逐个处理日志文件
+for log_name in "${!log_files[@]}"; do
+    pattern="${log_files[$log_name]}"
+    echo -e "${YELLOW}处理 $log_name 日志...${NC}"
+    
+    # 检查目录权限
+    if [ ! -w "/var/log" ]; then
+        echo -e "${RED}警告: 没有 /var/log 目录的写入权限${NC}"
+        continue
+    fi
+    
+    # 使用find命令并检查结果
+    found_files=$(find /var/log -type f -name "$pattern" 2>/dev/null)
+    if [ -n "$found_files" ]; then
+        echo -e "${GREEN}找到以下文件:${NC}"
+        echo "$found_files"
+        
+        # 尝试删除文件
+        while IFS= read -r file; do
+            if [ -f "$file" ]; then
+                echo -e "${YELLOW}删除文件: $file${NC}"
+                rm -f "$file" 2>/dev/null
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}成功删除: $file${NC}"
+                else
+                    echo -e "${RED}删除失败: $file${NC}"
+                fi
+            fi
+        done <<< "$found_files"
+    else
+        echo -e "${YELLOW}没有找到匹配的 $log_name 日志文件${NC}"
+    fi
+done
 
 # 压缩旧日志
 echo -e "${GREEN}压缩旧日志...${NC}"
-check_command "safe_find '/var/log' '.*\.log' 3 '-exec gzip {} \;'" "压缩日志文件"
+find /var/log -type f -name "*.log" -mtime +3 | while read -r file; do
+    if [ -f "$file" ] && [ ! -f "$file.gz" ]; then
+        echo -e "${YELLOW}压缩: $file${NC}"
+        gzip -f "$file" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}成功压缩: $file${NC}"
+        else
+            echo -e "${RED}压缩失败: $file${NC}"
+        fi
+    fi
+done
 
 # 删除超过3天的压缩日志
 echo -e "${GREEN}清理压缩日志...${NC}"
-check_command "safe_find '/var/log' '.*\.gz' 3" "清理压缩日志"
+find /var/log -type f -name "*.gz" -mtime +3 | while read -r file; do
+    if [ -f "$file" ]; then
+        echo -e "${YELLOW}删除: $file${NC}"
+        rm -f "$file" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}成功删除: $file${NC}"
+        else
+            echo -e "${RED}删除失败: $file${NC}"
+        fi
+    fi
+done
 
 # 清理journal日志
 echo -e "${GREEN}清理journal日志...${NC}"
-check_command "journalctl --vacuum-time=1d --vacuum-size=50M" "清理journal日志"
+if systemctl is-active systemd-journald >/dev/null 2>&1; then
+    journalctl --vacuum-time=1d --vacuum-size=50M
+    echo -e "${GREEN}Journal日志已清理${NC}"
+else
+    echo -e "${YELLOW}systemd-journald 服务未运行${NC}"
+fi
 
 # 清理当前日志文件
 echo -e "${GREEN}清理当前日志文件...${NC}"
@@ -238,9 +301,17 @@ current_logs=(
 )
 
 for log in "${current_logs[@]}"; do
-    if [ -f "$log" ]; then
+    if [ -f "$log" ] && [ -w "$log" ]; then
         echo -e "${YELLOW}清理: $log${NC}"
-        check_command "truncate -s 0 $log" "清理 $log"
+        cp /dev/null "$log" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}成功清理: $log${NC}"
+        else
+            echo -e "${RED}清理失败: $log${NC}"
+        fi
+    else
+        [ ! -f "$log" ] && echo -e "${YELLOW}文件不存在: $log${NC}"
+        [ ! -w "$log" ] && echo -e "${RED}没有写入权限: $log${NC}"
     fi
 done
 
