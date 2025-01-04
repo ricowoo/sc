@@ -13,7 +13,12 @@ fi
 
 # 函数：获取目录或文件大小
 get_size() {
-    du -sh "$1" 2>/dev/null | cut -f1
+    local size=$(du -sh "$1" 2>/dev/null | cut -f1)
+    if [ -z "$size" ]; then
+        echo "0B"
+    else
+        echo "$size"
+    fi
 }
 
 # 函数：计算清理前后的差异
@@ -22,12 +27,18 @@ calculate_freed_space() {
     local after=$2
     local path=$3
     
-    before_bytes=$(numfmt --from=iec "$before")
-    after_bytes=$(numfmt --from=iec "$after")
-    freed_bytes=$((before_bytes - after_bytes))
-    freed_human=$(numfmt --to=iec "$freed_bytes")
+    # 确保输入不为空
+    before=${before:-"0B"}
+    after=${after:-"0B"}
     
-    echo -e "${GREEN}$path 释放了: $freed_human${NC}"
+    before_bytes=$(numfmt --from=iec "${before}" 2>/dev/null || echo 0)
+    after_bytes=$(numfmt --from=iec "${after}" 2>/dev/null || echo 0)
+    freed_bytes=$((before_bytes - after_bytes))
+    freed_human=$(numfmt --to=iec "${freed_bytes}" 2>/dev/null || echo "0B")
+    
+    if [ "$freed_bytes" -gt 0 ]; then
+        echo -e "${GREEN}$path 释放了: $freed_human${NC}"
+    fi
 }
 
 # 函数：安全清理目录
@@ -142,8 +153,47 @@ fi
 
 # 7. 清理备份文件
 echo "清理旧备份文件..."
-# 清理超过10天的备份
-find / -type f \( -name "*.bak" -o -name "*.old" -o -name "*.backup" \) -mtime +10 -delete 2>/dev/null
+# 宝塔面板备份目录
+backup_dirs=(
+    "/www/backup"              # 网站备份
+    "/www/backup/database"     # 数据库备份
+    "/www/backup/site"         # 网站备份
+    "/www/backup/path"         # 目录备份
+    "/www/backup/cloud"        # 云端备份
+    "/www/server/panel/backup" # 面板备份
+    "/www/server/panel/logs"   # 面板日志
+    "/www/wwwlogs"            # 网站日志
+    "/www/server/data"        # 数据库文件
+)
+
+for dir in "${backup_dirs[@]}"; do
+    if [ -d "$dir" ]; then
+        echo "检查目录: $dir"
+        before_size=$(get_size "$dir")
+        # 清理备份文件
+        find "$dir" -type f \( -name "*.bak" -o -name "*.old" -o -name "*.backup" -o -name "*.[0-9]" -o -name "*.tar" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.sql" -o -name "*.log" \) -mtime +10 -delete -print 2>/dev/null
+        after_size=$(get_size "$dir")
+        calculate_freed_space "$before_size" "$after_size" "$dir 备份文件"
+    fi
+done
+
+# 清理网站备份（保留最近30天）
+if [ -d "/www/backup/site" ]; then
+    echo "清理网站备份..."
+    before_size=$(get_size "/www/backup/site")
+    find /www/backup/site -type f -mtime +30 -delete -print 2>/dev/null
+    after_size=$(get_size "/www/backup/site")
+    calculate_freed_space "$before_size" "$after_size" "网站备份"
+fi
+
+# 清理数据库备份（保留最近30天）
+if [ -d "/www/backup/database" ]; then
+    echo "清理数据库备份..."
+    before_size=$(get_size "/www/backup/database")
+    find /www/backup/database -type f -mtime +30 -delete -print 2>/dev/null
+    after_size=$(get_size "/www/backup/database")
+    calculate_freed_space "$before_size" "$after_size" "数据库备份"
+fi
 
 # 8. 清理Linux内核相关
 echo "清理内核相关..."
@@ -158,10 +208,33 @@ calculate_freed_space "$before_size" "$after_size" "内核相关"
 # 9. 清理systemd日志（优化）
 echo "清理systemd日志..."
 before_size=$(get_size /var/log/journal)
-# 只保留最近3天的日志，最大大小100M
-journalctl --vacuum-time=3d --vacuum-size=100M
+# 只保留最近1天的日志，最大大小50M
+journalctl --vacuum-time=1d --vacuum-size=50M
+# 强制清理所有日志
+rm -rf /var/log/journal/*
 after_size=$(get_size /var/log/journal)
 calculate_freed_space "$before_size" "$after_size" "Systemd日志"
+
+# 清理messages当前日志
+echo "清理当前messages日志..."
+if [ -f "/var/log/messages" ]; then
+    truncate -s 0 /var/log/messages
+fi
+
+# 清理secure当前日志
+if [ -f "/var/log/secure" ]; then
+    truncate -s 0 /var/log/secure
+fi
+
+# 清理maillog当前日志
+if [ -f "/var/log/maillog" ]; then
+    truncate -s 0 /var/log/maillog
+fi
+
+# 清理cron当前日志
+if [ -f "/var/log/cron" ]; then
+    truncate -s 0 /var/log/cron
+fi
 
 # 10. 清理软件源缓存
 echo "清理软件源缓存..."
@@ -189,8 +262,32 @@ find / -type f -name ".*\.un~" -delete 2>/dev/null
 
 # 13. 清理系统core dump
 echo "清理系统core dump..."
-echo "kernel.core_pattern=|/bin/false" > /etc/sysctl.d/disable-coredump.conf
+# 禁用core dump
+echo "kernel.core_pattern=/dev/null" > /etc/sysctl.d/disable-coredump.conf
+echo "kernel.core_uses_pid=0" >> /etc/sysctl.d/disable-coredump.conf
+echo "fs.suid_dumpable=0" >> /etc/sysctl.d/disable-coredump.conf
 sysctl -p /etc/sysctl.d/disable-coredump.conf
+
+# 清理已存在的core dump文件
+echo "清理已存在的core dump文件..."
+core_files=$(find / -type f -name "core" -o -name "core.*" 2>/dev/null)
+if [ -n "$core_files" ]; then
+    before_size=$(get_size "$core_files")
+    rm -f $core_files
+    echo "已删除core dump文件"
+fi
+
+# 清理系统崩溃目录
+crash_dirs=("/var/crash" "/var/lib/systemd/coredump" "/var/spool/abrt")
+for dir in "${crash_dirs[@]}"; do
+    if [ -d "$dir" ]; then
+        echo "清理目录: $dir"
+        before_size=$(get_size "$dir")
+        rm -rf "${dir:?}"/*
+        after_size=$(get_size "$dir")
+        calculate_freed_space "$before_size" "$after_size" "崩溃转储"
+    fi
+done
 
 # 显示系统空间使用情况分析
 echo -e "\n=== 系统空间使用情况分析 ==="
