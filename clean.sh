@@ -168,11 +168,11 @@ if command -v lvs &> /dev/null; then
     done
 fi
 
-# 12. 清理vim备份文件
-echo "清理vim备份文件..."
-find / -type f -name ".*.swp" -delete 2>/dev/null
-find / -type f -name ".*.swo" -delete 2>/dev/null
-find / -type f -name "*~" -delete 2>/dev/null
+# 12. 清理vi备份文件
+echo "清理vi备份文件..."
+find / -type f -name ".*.sw[a-p]" -delete 2>/dev/null
+find / -type f -name ".*~" -delete 2>/dev/null
+find / -type f -name ".*\.un~" -delete 2>/dev/null
 
 # 13. 清理系统core dump
 echo "清理系统core dump..."
