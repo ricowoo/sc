@@ -101,26 +101,53 @@ calculate_freed_space() {
     fi
 }
 
+# 错误处理函数
+handle_error() {
+    local line_number=$1
+    local error_code=$2
+    echo -e "${RED}警告: 在第 $line_number 行发生错误 (错误码: $error_code)${NC}"
+    echo -e "${YELLOW}继续执行其他清理任务...${NC}"
+}
+
+# 替换原有的错误处理
+trap 'handle_error ${LINENO} $?' ERR
+
+# 添加执行状态检查函数
+check_command() {
+    local cmd="$1"
+    local msg="$2"
+    
+    echo -e "${YELLOW}执行: $msg${NC}"
+    if ! eval "$cmd"; then
+        echo -e "${RED}警告: $msg 失败，继续执行其他任务${NC}"
+        return 1
+    fi
+    return 0
+}
+
 # 函数：安全清理目录
 safe_clean_dir() {
     local dir=$1
     local exclude=$2
     
-    # 检查是否为受保护目录
     if ! check_protected_path "$dir"; then
         return 1
     fi
     
-    if [ -d "$dir" ]; then
-        before_size=$(get_size "$dir")
-        if [ -n "$exclude" ]; then
-            find "$dir" -type f ! -name "$exclude" -delete 2>/dev/null
-        else
-            find "$dir" -type f -delete 2>/dev/null
-        fi
-        after_size=$(get_size "$dir")
-        calculate_freed_space "$before_size" "$after_size" "$dir"
+    if [ ! -d "$dir" ]; then
+        echo -e "${YELLOW}目录不存在: $dir${NC}"
+        return 1
     fi
+    
+    echo -e "${GREEN}清理目录: $dir${NC}"
+    before_size=$(get_size "$dir")
+    if [ -n "$exclude" ]; then
+        find "$dir" -type f ! -name "$exclude" -delete 2>/dev/null || true
+    else
+        find "$dir" -type f -delete 2>/dev/null || true
+    fi
+    after_size=$(get_size "$dir")
+    calculate_freed_space "$before_size" "$after_size" "$dir"
 }
 
 # 修改 find 命令，添加保护
@@ -134,7 +161,13 @@ safe_find() {
         return 1
     fi
     
-    find "$dir" -type f -regextype posix-extended -regex "$pattern" -mtime +"$days" $action 2>/dev/null
+    if [ ! -d "$dir" ]; then
+        echo -e "${YELLOW}目录不存在: $dir${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}清理目录: $dir${NC}"
+    find "$dir" -type f -regextype posix-extended -regex "$pattern" -mtime +"$days" $action 2>/dev/null || true
 }
 
 echo -e "${GREEN}开始系统清理...${NC}"
@@ -142,10 +175,6 @@ echo "清理时间: $(date)"
 
 # 执行系统检查
 pre_clean_check
-
-# 设置错误处理
-set -e  # 遇到错误立即退出
-trap 'echo -e "${RED}错误发生在第 $LINENO 行${NC}"' ERR
 
 # 记录总体清理前的可用空间
 total_before=$(df -h / | awk '/\// {print $4}')
@@ -177,26 +206,44 @@ echo "清理系统日志..."
 before_size=$(get_size /var/log)
 
 # 清理系统轮转日志
-echo "清理系统轮转日志..."
-safe_find "/var/log" "messages-.*" 3
-safe_find "/var/log" "secure-.*" 3
-safe_find "/var/log" "maillog-.*" 3
-safe_find "/var/log" "spooler-.*" 3
-safe_find "/var/log" "boot\.log-.*" 3
-safe_find "/var/log" "cron-.*" 3
-safe_find "/var/log" "yum\.log-.*" 3
-safe_find "/var/log" "dmesg\.old" 3
+echo -e "${GREEN}清理系统轮转日志...${NC}"
+check_command "safe_find '/var/log' 'messages-.*' 3" "清理messages日志"
+check_command "safe_find '/var/log' 'secure-.*' 3" "清理secure日志"
+check_command "safe_find '/var/log' 'maillog-.*' 3" "清理maillog日志"
+check_command "safe_find '/var/log' 'spooler-.*' 3" "清理spooler日志"
+check_command "safe_find '/var/log' 'boot\.log-.*' 3" "清理boot日志"
+check_command "safe_find '/var/log' 'cron-.*' 3" "清理cron日志"
+check_command "safe_find '/var/log' 'yum\.log-.*' 3" "清理yum日志"
+check_command "safe_find '/var/log' 'dmesg\.old' 3" "清理dmesg日志"
 
 # 压缩旧日志
-safe_find "/var/log" ".*\.log" 3 "-exec gzip {} \;"
+echo -e "${GREEN}压缩旧日志...${NC}"
+check_command "safe_find '/var/log' '.*\.log' 3 '-exec gzip {} \;'" "压缩日志文件"
 
 # 删除超过3天的压缩日志
-safe_find "/var/log" ".*\.gz" 3
+echo -e "${GREEN}清理压缩日志...${NC}"
+check_command "safe_find '/var/log' '.*\.gz' 3" "清理压缩日志"
 
 # 清理journal日志
-journalctl --vacuum-size=100M
-# 清理audit日志
-find /var/log/audit/ -type f -name "audit.log.*" -mtime +7 -delete
+echo -e "${GREEN}清理journal日志...${NC}"
+check_command "journalctl --vacuum-time=1d --vacuum-size=50M" "清理journal日志"
+
+# 清理当前日志文件
+echo -e "${GREEN}清理当前日志文件...${NC}"
+current_logs=(
+    "/var/log/messages"
+    "/var/log/secure"
+    "/var/log/maillog"
+    "/var/log/cron"
+)
+
+for log in "${current_logs[@]}"; do
+    if [ -f "$log" ]; then
+        echo -e "${YELLOW}清理: $log${NC}"
+        check_command "truncate -s 0 $log" "清理 $log"
+    fi
+done
+
 after_size=$(get_size /var/log)
 calculate_freed_space "$before_size" "$after_size" "系统日志"
 
