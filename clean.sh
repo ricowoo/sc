@@ -190,9 +190,9 @@ du -hx --max-depth=3 / 2>/dev/null | sort -rh | head -n 20
 echo -e "\n大文件列表（>100MB）:"
 find / -xdev -type f -size +100M -exec ls -lh {} \; 2>/dev/null | sort -k5,5rh
 
-# 显示老旧文件（超过180天未访问）
-echo -e "\n老旧文件（超过180天未访问）:"
-find / -xdev -type f -atime +180 -size +10M -exec ls -lh {} \; 2>/dev/null | sort -k5,5rh
+# 显示老旧文件（超过30天未访问）
+echo -e "\n老旧文件（超过30天未访问）:"
+find / -xdev -type f -atime +30 -size +10M -exec ls -lh {} \; 2>/dev/null | sort -k5,5rh
 
 # 显示文件系统使用情况
 echo -e "\n文件系统使用情况:"
