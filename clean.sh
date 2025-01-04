@@ -77,10 +77,23 @@ calculate_freed_space "$before_size" "$after_size" "软件包缓存"
 # 3. 清理系统日志（扩展）
 echo "清理系统日志..."
 before_size=$(get_size /var/log)
+
+# 清理系统轮转日志
+echo "清理系统轮转日志..."
+find /var/log -type f -name "messages-*" -mtime +3 -delete
+find /var/log -type f -name "secure-*" -mtime +3 -delete
+find /var/log -type f -name "maillog-*" -mtime +3 -delete
+find /var/log -type f -name "spooler-*" -mtime +3 -delete
+find /var/log -type f -name "boot.log-*" -mtime +3 -delete
+find /var/log -type f -name "cron-*" -mtime +3 -delete
+find /var/log -type f -name "yum.log-*" -mtime +3 -delete
+find /var/log -type f -name "dmesg.old" -mtime +3 -delete
+
 # 压缩旧日志
-find /var/log -type f -name "*.log" -mtime +7 -exec gzip {} \;
+find /var/log -type f -name "*.log" -mtime +3 -exec gzip {} \;
+
 # 删除超过10天的压缩日志
-find /var/log -type f -name "*.gz" -mtime +10 -delete
+find /var/log -type f -name "*.gz" -mtime +3 -delete
 # 清理journal日志
 journalctl --vacuum-size=100M
 # 清理audit日志
